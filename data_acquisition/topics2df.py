@@ -36,29 +36,30 @@ mog5_columns = ['trans x mog5', 'trans y mog5', 'trans z mog5',
 mog9_columns = ['trans x mog9', 'trans y mog9', 'trans z mog9', 
                 'rot x deg mog9', 'rot y deg mog9', 'rot z deg mog9'] 
 
+apriltag_path= '/home/kathrin/dev_ws/csv_files/test/'
+aruco_path = '/home/kathrin/dev_ws/csv_files/test/'
+
 
 class EvaluationData(Node):
     
     def __init__(self):
         super().__init__('eval_data')
+        global apriltag_path, aruco_path
         
-        self.declare_parameter("is_tf", True)
-        # self.declare_parameters(namespace='',
-        #                         parameters=[
-        #                             ('param_name1', None),
-        #                             ('param_name2', None)])
+        # (parameter name, parameter value)
+        self.declare_parameters(namespace='',
+                                parameters=[
+                                    ('aruco_file', 'aruco_data.xlsx'),
+                                    ('apriltag_file', 'apriltag_data.xlsx')])
         
-        is_tf = bool(self.get_parameter('is_tf').value)#get_parameter_value().double_value 
-        print(is_tf)
+        apriltag_path += str(self.get_parameter('apriltag_file').value)
+        print(f'apriltag_path is "{apriltag_path}"')
+        aruco_path += str(self.get_parameter('aruco_file').value)
         
-        # param_str = self.get_parameter('my_str')
-        # param_int = self.get_parameter('my_int')
-        # param_double_array = self.get_parameter('my_double_array')
-        # self.get_logger().info("str: %s, int: %s, double[]: %s" %
-        #                        (str(param_str.value),
-        #                         str(param_int.value),
-        #                         str(param_double_array.value),))
-        
+        # Only necessary if ArUco with ArUco marker instead of AprilTag marker
+        # self.declare_parameter("is_tf", True)        # 
+        # is_tf = bool(self.get_parameter('is_tf').value) 
+        # print(is_tf)       
         
         
 def main(args=None):
