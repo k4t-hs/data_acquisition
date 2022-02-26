@@ -22,7 +22,7 @@ setup(
         'console_scripts': [
             'bag2df = data_acquisition.bag2df:main',
             'imprTests = data_acquisition.imprTests:main',
-            'key_input = data_acquisition.key_input:main',
+            'topics2df = data_acquisition.topics2df:main',
         ],
     },
 )
