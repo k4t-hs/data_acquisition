@@ -23,6 +23,7 @@ setup(
             'bag2df = data_acquisition.bag2df:main',
             'imprTests = data_acquisition.imprTests:main',
             'topics2df = data_acquisition.topics2df:main',
+            'topics2df_v2 = data_acquisition.topics2df_v2:main',
         ],
     },
 )
