@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import numpy as np
+import pandas as pd
+import scipy.stats as stats
+import warnings
+
 import rclpy
 from rclpy.node import Node
 from tf2_msgs.msg import TFMessage
 from ros2_aruco_interfaces.msg import ArucoMarkers
-
 
 
 topic_types = ['original', 
@@ -48,11 +52,16 @@ mog9_columns = ['trans x mog9', 'trans y mog9', 'trans z mog9',
 apriltag_path= '/home/kathrin/dev_ws/csv_files/test/'
 aruco_path = '/home/kathrin/dev_ws/csv_files/test/'
 
+grid_sizes = {1 : 0,
+              3 : 0, 
+              5 : 1,
+              9 : 2}
+
 
 class EvaluationData(Node):
-    
+
     def __init__(self):
-        super().__init__('eval_data')
+        super().__init__("improvement_tests")
         global apriltag_path, aruco_path, topic_types
         
         # (parameter name, parameter value)
@@ -60,43 +69,45 @@ class EvaluationData(Node):
             namespace='',
             parameters=[
                 ('aruco_file', 'aruco_data.xlsx'),
-                ('apriltag_file', 'apriltag_data.xlsx')])
-        
-        # Only necessary if ArUco with ArUco marker instead of AprilTag marker
-        # self.declare_parameter("is_tf", True)        # 
-        # is_tf = bool(self.get_parameter('is_tf').value) 
-        # print(is_tf) 
-
+                ('apriltag_file', 'apriltag_data.xlsx'),
+                ("grid_size", 1)])
         apriltag_path += str(self.get_parameter('apriltag_file').value)
-        aruco_path += str(self.get_parameter('aruco_file').value) 
+        aruco_path += str(self.get_parameter('aruco').value) 
         
-        self.create_subscription(
-            TFMessage, 
-            'tf', 
-            self.apriltag_original_callback,
+        self.time = 0
+        
+        self.sub_apriltag = self.create_subscription(
+            TFMessage,
+            "tf",
+            self.apriltag_listener_callback,
             10)
-        self.create_subscription(
-            ArucoMarkers, 
-            'aruco_markers', 
-            self.aruco_original_callback,
-            10)
+        self.sub_apriltag
         
-        for topic_type in topic_types[1:]:
-            self.create_subscription(
-                TFMessage, 
-                'tf', 
-                self.apriltag_original_callback,
-                10)
-            self.create_subscription(
-                ArucoMarkers, 
-                'tf', 
-                self.apriltag_original_callback,
-                10)
+        # self.sub_aruco = self.create_subscription(
+        #     ArucoMarkers,
+        #     "aruco_markers",
+        #     self.aruco_listener_callback,
+        #     10)
+        # self.tf_subscription
+     
+
+    def apriltag_listener_callback(self, msg):
+        markers_id4 = []
+        for tf in msg.transforms:
+            tag_id = tf.child_frame_id
+            if tag_id.endswith(':4'):
+                markers_id4.append(tf)
+                
+        if len(markers_id4) == int(self.get_parameter('grid_size').value):
+            print(f'successfully received msg with {len(markers_id4)}')
+     
+    # def aruco_listener_callback(self, msg):
         
-        
-        
-        
+
+
+         
 def main(args=None):
+
     rclpy.init(args=args)
     
     eval_data = EvaluationData()
@@ -106,5 +117,5 @@ def main(args=None):
     rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -17,6 +17,10 @@ from ros2_aruco_interfaces.msg import ArucoMarkers
 columns = ["translation x", "translation y", "translation z",
            "rotation x", "rotation y", "rotation z", "rotation w"]
 
+grid_sizes = {3 : 0, 
+              5 : 1,
+              9 : 2}
+
 
 class Improvement_Tests(Node):
 
@@ -42,15 +46,20 @@ class Improvement_Tests(Node):
         self.tf_mot_publishers = []
         for num in [3,5,10]:
             pubs = []
-            for std in ["zscore2", "zscore3", "iqr"]:# z score / interquartile range # 75,60,90]:
-                pub = self.create_publisher(TFMessage, "tf_mot_"+str(num) + "_" + str(std), 10)
+            for std in ["z2", "z3", "iqr"]:# z score / interquartile range # 75,60,90]:
+                pub = self.create_publisher(TFMessage, "tf_mot"+str(num)+str(std), 10)
                 pubs.append(pub)
             self.tf_mot_publishers.append(pubs)
         self.three_tfs = pd.DataFrame(columns=columns)
         self.five_tfs = pd.DataFrame(columns=columns)
         self.ten_tfs = pd.DataFrame(columns=columns)  
         
-        self.tf_mog_publisher = self.create_publisher(TFMessage, "tf_mog", 10)
+        self.tf_mog_publishers = []
+        for num in grid_sizes:
+            self.tf_mog_publishers.append(self.create_publisher(
+                TFMessage, 
+                "tf_mog"+str(num), 
+                10))
         
         # 3, 5 or 9
         self.declare_parameter("grid_size", 3.0)
@@ -58,15 +67,22 @@ class Improvement_Tests(Node):
         self.pose_mot_publishers = []
         for num in [3,5,10]:
             pubs = []
-            for std in ["zscore2", "zscore3", "iqr"]:# z score / interquartile range # 75,60,90]:
-                pub = self.create_publisher(ArucoMarkers, "pose_mot_"+str(num) + "_" + str(std), 10)
+            for std in ["z2", "z3", "iqr"]:# z score / interquartile range # 75,60,90]:
+                pub = self.create_publisher(ArucoMarkers, "pose_mot"+str(num)+str(std), 10)
                 pubs.append(pub)
             self.pose_mot_publishers.append(pubs)
         self.three_poses = pd.DataFrame(columns=columns)
         self.five_poses = pd.DataFrame(columns=columns)
         self.ten_poses = pd.DataFrame(columns=columns)  
         
-        self.pose_mog_publisher = self.create_publisher(ArucoMarkers, "pose_mog", 10)
+        self.pose_mog_publishers = []
+        for num in grid_sizes:
+            self.pose_mog_publishers.append(self.create_publisher(
+                ArucoMarkers, 
+                "tf_mog"+str(num), 
+                10))
+
+
      
 
     def tf_listener_callback(self, msg):
@@ -94,7 +110,7 @@ class Improvement_Tests(Node):
         if len(tfs_id4) == grid_size:
             means = df_id4.mean()
             new_msg = self.create_new_mean_msg(msg, tfs_id4, means)
-            self.tf_mog_publisher.publish(new_msg)
+            self.tf_mog_publishers[grid_sizes[grid_size]].publish(new_msg)
             
     def pose_publish_mog(self, msg):
         poses_id4 = []
@@ -113,7 +129,7 @@ class Improvement_Tests(Node):
         if len(poses_id4) == grid_size:
             means = df_id4.mean()
             new_msg = self.create_new_mean_msg(msg, poses_id4, means)
-            self.tf_mog_publisher.publish(new_msg)            
+            self.tf_mog_publishers[grid_sizes[grid_size]].publish(new_msg)            
             
         
                 
