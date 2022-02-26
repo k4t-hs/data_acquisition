@@ -50,7 +50,7 @@ class Improvement_Tests(Node):
         self.five_tfs = pd.DataFrame(columns=columns)
         self.ten_tfs = pd.DataFrame(columns=columns)  
         
-        self.tf_mmm_publisher = self.create_publisher(TFMessage, "tf_mmm", 10)
+        self.tf_mog_publisher = self.create_publisher(TFMessage, "tf_mog", 10)
         
         # 3, 5 or 9
         self.declare_parameter("grid_size", 3.0)
@@ -66,18 +66,18 @@ class Improvement_Tests(Node):
         self.five_poses = pd.DataFrame(columns=columns)
         self.ten_poses = pd.DataFrame(columns=columns)  
         
-        self.pose_mmm_publisher = self.create_publisher(ArucoMarkers, "pose_mmm", 10)
+        self.pose_mog_publisher = self.create_publisher(ArucoMarkers, "pose_mog", 10)
      
 
     def tf_listener_callback(self, msg):
         self.tf_publish_mot(msg)
-        self.tf_publish_mmm(msg)
+        self.tf_publish_mog(msg)
      
     def pose_listener_callback(self, msg):
         self.pose_publish_mot(msg)
-        self.pose_publish_mmm(msg)
+        self.pose_publish_mog(msg)
                 
-    def tf_publish_mmm(self, msg):
+    def tf_publish_mog(self, msg):
         tfs_id4 = []
         df_id4 = pd.DataFrame(columns=columns)
         for tf in msg.transforms:
@@ -94,9 +94,9 @@ class Improvement_Tests(Node):
         if len(tfs_id4) == grid_size:
             means = df_id4.mean()
             new_msg = self.create_new_mean_msg(msg, tfs_id4, means)
-            self.tf_mmm_publisher.publish(new_msg)
+            self.tf_mog_publisher.publish(new_msg)
             
-    def pose_publish_mmm(self, msg):
+    def pose_publish_mog(self, msg):
         poses_id4 = []
         df_id4 = pd.DataFrame(columns=columns)
         for i, pose in enumerate(msg.poses):
@@ -113,7 +113,7 @@ class Improvement_Tests(Node):
         if len(poses_id4) == grid_size:
             means = df_id4.mean()
             new_msg = self.create_new_mean_msg(msg, poses_id4, means)
-            self.tf_mmm_publisher.publish(new_msg)            
+            self.tf_mog_publisher.publish(new_msg)            
             
         
                 
