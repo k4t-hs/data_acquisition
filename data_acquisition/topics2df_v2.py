@@ -7,6 +7,7 @@ from math import pi
 import warnings
 import numpy as np
 import scipy.stats as stats
+import xlrd
 
 import rclpy
 from rclpy.parameter import Parameter
@@ -67,7 +68,9 @@ dict_mot = {'columns_mot3z3' :
 # mog9_columns = ['trans x mog9', 'trans y mog9', 'trans z mog9', 
 #                 'rot x deg mog9', 'rot y deg mog9', 'rot z deg mog9'] 
 
-path_excel= '/home/kathrin/dev_ws/csv_files/test/'
+# path_excel= '/home/kathrin/dev_ws/csv_files/test/'
+path_apriltag = '/home/kathrin/dev_ws/csv_files/test/'
+path_aruco= '/home/kathrin/dev_ws/csv_files/test/'
 
 duration_max = 10.0
 
@@ -81,18 +84,20 @@ class EvaluationData(Node):
 
     def __init__(self):
         super().__init__('eval_data')
-        global path_excel, topic_types
+        global path_apriltag, path_aruco, topic_types
         
         # (parameter name, parameter value)
         self.declare_parameters(
             namespace='',
             parameters=[
-                ('path_excel', 'eval_data.xlsx'),
+                ('name_apriltag', 'data_apriltag.xlsx'),
+                ('name_aruco', 'data_aruco.xlsx'),
                 ('grid_size', 1),
                 ('vals_gt', [0.0, 0.0, 30.0, 0.0, 0.0, 0.0]),
                 ('record_apriltag', True),
                 ('record_aruco', True)])
-        path_excel += str(self.get_parameter('path_excel').value)
+        path_apriltag += str(self.get_parameter('name_apriltag').value)
+        path_aruco += str(self.get_parameter('name_aruco').value) 
         
         vals_gt_orig = self.get_parameter('vals_gt').value
         vals_gt  = [-1, -1] + vals_gt_orig[:3]
@@ -106,27 +111,33 @@ class EvaluationData(Node):
         self.frame_idx_aruco = -1
         self.series_all_aruco = list()
         
-        if os.path.isfile(path_excel):
-            try:
-                self.df_apriltag = pd.read_excel(path_excel, sheet_name='AprilTag')
-                self.df_apriltag = self.df_apriltag.iloc[:, 1:]
-            except ValueError:
-                # Worksheet 'AprilTag' does not exist
-                dictionary = dict(zip(columns_orig, vals_gt))
-                self.df_apriltag = pd.DataFrame(data=dictionary, index=[0])
-                self.frame_idx_apriltag=0
-            try:
-                self.df_aruco = pd.read_excel(path_excel, sheet_name='ArUco')
-                self.df_aruco = self.df_aruco.iloc[:, 1:]
-            except ValueError:
-                # Worksheet 'ArUco' does not exist
-                dictionary = dict(zip(columns_orig, vals_gt))
-                self.df_aruco = pd.DataFrame(data=dictionary, index=[0])
-                self.frame_idx_aruco=0
+        if os.path.isfile(path_apriltag):
+            # try:
+            self.df_apriltag = pd.read_excel(path_apriltag, sheet_name='AprilTag')
+            self.df_apriltag = self.df_apriltag.iloc[:, 1:]
+            # except (ValueError, xlrd.biffh.XLRDError):
+            #     # Worksheet 'AprilTag' does not exist
+            #     dictionary = dict(zip(columns_orig, vals_gt))
+            #     self.df_apriltag = pd.DataFrame(data=dictionary, index=[0])
+            #     self.frame_idx_apriltag=0
+            # try:
+            #     self.df_aruco = pd.read_excel(path_excel, sheet_name='ArUco')
+            #     self.df_aruco = self.df_aruco.iloc[:, 1:]
+            # except (ValueError, xlrd.biffh.XLRDError):
+            #     # Worksheet 'ArUco' does not exist
+            #     dictionary = dict(zip(columns_orig, vals_gt))
+            #     self.df_aruco = pd.DataFrame(data=dictionary, index=[0])
+            #     self.frame_idx_aruco=0
         else:
             dictionary = dict(zip(columns_orig, vals_gt))
             self.df_apriltag = pd.DataFrame(data=dictionary, index=[0])
             self.frame_idx_apriltag=0
+            
+        if os.path.isfile(path_aruco):
+            self.df_aruco = pd.read_excel(path_aruco, sheet_name='ArUco')
+            self.df_aruco = self.df_aruco.iloc[:, 1:]
+        else:
+            dictionary = dict(zip(columns_orig, vals_gt))
             self.df_aruco = pd.DataFrame(data=dictionary, index=[0])
             self.frame_idx_aruco=0
 
@@ -148,9 +159,9 @@ class EvaluationData(Node):
             10)
         self.sub_aruco
         
-        self.aruco_mot3 = list()
-        self.aruco_mot5 = list()
-        self.aruco_mot10 = list()
+        self.mot3_aruco = list()
+        self.mot5_aruco = list()
+        self.mot10_aruco = list()
      
 
     def apriltag_listener_callback(self, msg):
@@ -169,7 +180,7 @@ class EvaluationData(Node):
             if len(markers_id4) == 1:#grid_size:
                 series_resulting = list()
                 
-                time_diff = self.get_time(msg.transforms[0].header.stamp)
+                time_diff = self.get_time(markers_id4[0].header.stamp)#msg.transforms[0].header.stamp)
                 
                 trans = markers_id4[0].transform.translation
                 rot = markers_id4[0].transform.rotation
@@ -221,11 +232,11 @@ class EvaluationData(Node):
                     # print(self.df_apriltag.iloc[-2:])
                     print("--------------------------------------------------",
                           "--------------------------------------------------")
-                    print(f'Save path: {path_excel}')
+                    print(f'Save path: {path_apriltag}')
                     print("--------------------------------------------------",
                           "--------------------------------------------------")
                     
-                    self.df_apriltag.to_excel(path_excel, sheet_name='AprilTag')
+                    self.df_apriltag.to_excel(path_apriltag, sheet_name='AprilTag')
                     
                     self.start_time_apriltag = -1
                     self.frame_idx_apriltag = -1
@@ -249,81 +260,77 @@ class EvaluationData(Node):
                 self.frame_idx_apriltag += 1
                 
             #grid_size = int(self.get_parameter('grid_size').value)
-            markers_id4 = self.get_markers_with_id(msg, ':4')
+            markers_id4 = self.get_markers_with_id(msg, 4)
             
             if len(markers_id4) == 1:#grid_size:
                 series_resulting = list()
                 
-                time_diff = self.get_time(msg.transforms[0].header.stamp)
+                time_diff = self.get_time(msg.header.stamp)
                 
-                trans = markers_id4[0].transform.translation
-                rot = markers_id4[0].transform.rotation
+                pos = markers_id4[0].position
+                orient = markers_id4[0].orientation
                 
-                vals_orig = self.get_data_from_msg(trans, rot, True, time_diff)
+                vals_orig = self.get_data_from_msg(pos, orient, True, time_diff)
                 
                 series_orig = pd.Series(data=vals_orig, index=columns_orig)
                 
                 series_resulting.append(series_orig)
                 
-                # TODO add mot
-                self.mot3_apriltag.append(series_orig)
-                self.mot5_apriltag.append(series_orig)
-                self.mot10_apriltag.append(series_orig)
+                self.mot3_aruco.append(series_orig)
+                self.mot5_aruco.append(series_orig)
+                self.mot10_aruco.append(series_orig)
                 
-                if len(self.mot3_apriltag) == 3:
-                    # create mot series
+                if len(self.mot3_aruco) == 3:
                     print("mot3 au")
-                    means = self.get_means(self.mot3_apriltag)
+                    means = self.get_means(self.mot3_aruco)
                     series_resulting += means
-                    self.mot3_apriltag.clear()
+                    self.mot3_aruco.clear()
                     
-                if len(self.mot5_apriltag) == 5:
-                    # create mot series
+                if len(self.mot5_aruco) == 5:
                     print("mot5 au")
-                    means = self.get_means(self.mot5_apriltag)
+                    means = self.get_means(self.mot5_aruco)
                     series_resulting += means
-                    self.mot5_apriltag.clear()
+                    self.mot5_aruco.clear()
                     
-                if len(self.mot10_apriltag) == 10:
-                    # create mot series
+                if len(self.mot10_aruco) == 10:
                     print("mot10 au")
-                    means = self.get_means(self.mot10_apriltag)
+                    means = self.get_means(self.mot10_aruco)
                     series_resulting += means
-                    self.mot10_apriltag.clear()
+                    self.mot10_aruco.clear()
                 
-                self.series_all_apriltag.append(pd.concat(series_resulting, sort=False))
-                self.frame_idx_apriltag += 1
+                self.series_all_aruco.append(pd.concat(series_resulting, sort=False))
+                self.frame_idx_aruco += 1
                 
-                print(f'AprilTag Marker with index {self.frame_idx_apriltag} recorded at time {time_diff}.')
+                print(f'ArUco Marker with index {self.frame_idx_aruco} recorded at time {time_diff}.')
                     
                 if time_diff >= duration_max:
-                    self.df_apriltag = pd.concat(
-                        [self.df_apriltag, 
-                         pd.concat(self.series_all_apriltag, axis=1, sort=False).T],
+                    self.df_aruco = pd.concat(
+                        [self.df_aruco, 
+                          pd.concat(self.series_all_aruco, axis=1, sort=False).T],
                         ignore_index=True,
                         sort=False)
                     
                     print("--------------------------------------------------",
                           "--------------------------------------------------")
-                    print(f'DF columns: {self.df_apriltag.columns}')
+                    print(f'ArUco DF columns: {self.df_aruco.columns}')
                     print("--------------------------------------------------",
                           "--------------------------------------------------")
                     # print(self.df_apriltag[dict_mot['columns_mot3z3'][0]])
-                    print(self.df_apriltag.head(15))
+                    print(self.df_aruco.head(15))
                     # print(self.df_apriltag.iloc[-2:])
                     print("--------------------------------------------------",
                           "--------------------------------------------------")
-                    print(f'Save path: {path_excel}')
+                    print(f'Save path: {path_aruco}')
                     print("--------------------------------------------------",
                           "--------------------------------------------------")
                     
-                    self.df_apriltag.to_excel(path_excel, sheet_name='ArUco')
+                    self.df_aruco.to_excel(path_aruco, sheet_name='ArUco')
                     
                     self.start_time_aruco = -1
-                    self.frame_idx_ruco = -1
-                    self.mot3_apriltag.clear()
-                    self.mot5_apriltag.clear()
-                    self.mot10_apriltag.clear()
+                    self.frame_idx_aruco = -1
+                    self.mot3_aruco.clear()
+                    self.mot5_aruco.clear()
+                    self.mot10_aruco.clear()
 
                     self.set_parameters([Parameter(
                         'record_aruco',
@@ -417,9 +424,16 @@ class EvaluationData(Node):
     
     
     def get_deg_from_quaternion(self, rot):
-        # TODO make applicable for ArUco
         (roll, pitch, yaw) = euler_from_quaternion([rot.x, rot.y, rot.z, rot.w])
-        return [(180/pi)*roll, (180/pi)*pitch, (180/pi)*yaw]
+        deg_list = self.get_deg([roll, pitch,yaw])
+        return deg_list
+    
+    def get_deg(self, rad_list):
+        deg_list = list()
+        for x in rad_list:
+            deg_list.append((180/pi)*x)
+        return deg_list
+            
       
         
     def get_markers_with_id(self, msg, id_val):
