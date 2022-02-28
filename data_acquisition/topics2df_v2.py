@@ -90,35 +90,45 @@ class EvaluationData(Node):
                 ('path_excel', 'eval_data.xlsx'),
                 ('grid_size', 1),
                 ('vals_gt', [0.0, 0.0, 30.0, 0.0, 0.0, 0.0]),
-                ('record', True)])
+                ('record_apriltag', True),
+                ('record_aruco', True)])
         path_excel += str(self.get_parameter('path_excel').value)
         
         vals_gt_orig = self.get_parameter('vals_gt').value
         vals_gt  = [-1, -1] + vals_gt_orig[:3]
         vals_gt += self.get_quaternion_from_deg(vals_gt_orig[3:]) + vals_gt_orig[3:]
         
-        self.start_time = -1
-        self.frame_index = -1
-        self.series_all = list()
+        self.start_time_apriltag = -1
+        self.frame_idx_apriltag = -1
+        self.series_all_apriltag = list()
+        
+        self.start_time_aruco = -1
+        self.frame_idx_aruco = -1
+        self.series_all_aruco = list()
         
         if os.path.isfile(path_excel):
-            # try:
+            try:
                 self.df_apriltag = pd.read_excel(path_excel, sheet_name='AprilTag')
                 self.df_apriltag = self.df_apriltag.iloc[:, 1:]
-            # except:
-            #     # do same as else
-            #     print("test")
-            # try:
-            #     self.df_aruco = pd.read_excel(path_excel, sheet_name='ArUco')
-            #     self.df_aruco = self.df_aruco.iloc[:, 1:]
-            # except:
-            #     # do same as else
-            #     print("test")
-
+            except ValueError:
+                # Worksheet 'AprilTag' does not exist
+                dictionary = dict(zip(columns_orig, vals_gt))
+                self.df_apriltag = pd.DataFrame(data=dictionary, index=[0])
+                self.frame_idx_apriltag=0
+            try:
+                self.df_aruco = pd.read_excel(path_excel, sheet_name='ArUco')
+                self.df_aruco = self.df_aruco.iloc[:, 1:]
+            except ValueError:
+                # Worksheet 'ArUco' does not exist
+                dictionary = dict(zip(columns_orig, vals_gt))
+                self.df_aruco = pd.DataFrame(data=dictionary, index=[0])
+                self.frame_idx_aruco=0
         else:
             dictionary = dict(zip(columns_orig, vals_gt))
             self.df_apriltag = pd.DataFrame(data=dictionary, index=[0])
-            self.frame_index=0
+            self.frame_idx_apriltag=0
+            self.df_aruco = pd.DataFrame(data=dictionary, index=[0])
+            self.frame_idx_aruco=0
 
         self.sub_apriltag = self.create_subscription(
             TFMessage,
@@ -127,32 +137,31 @@ class EvaluationData(Node):
             10)
         self.sub_apriltag
         
-        self.apriltag_mot3 = list()
-        self.apriltag_mot5 = list()
-        self.apriltag_mot10 = list()
+        self.mot3_apriltag = list()
+        self.mot5_apriltag = list()
+        self.mot10_apriltag = list()
      
-        # self.sub_aruco = self.create_subscription(
-        #     ArucoMarkers,
-        #     "aruco_markers",
-        #     self.aruco_listener_callback,
-        #     10)
-        # self.tf_subscription
+        self.sub_aruco = self.create_subscription(
+            ArucoMarkers,
+            "aruco_markers",
+            self.aruco_listener_callback,
+            10)
+        self.sub_aruco
         
-        # self.aruco_mot3 = list()
-        # self.aruco_mot5 = list()
-        # self.aruco_mot10 = list()
+        self.aruco_mot3 = list()
+        self.aruco_mot5 = list()
+        self.aruco_mot10 = list()
      
 
     def apriltag_listener_callback(self, msg):
-        if self.get_parameter('record').value:
+        if self.get_parameter('record_apriltag').value:
             
-            if self.frame_index < 0:
+            if self.frame_idx_apriltag < 0:
                 vals_gt_orig = list(self.get_parameter('vals_gt').value)
-                print(vals_gt_orig)
                 vals_gt  = [-1, -1] + vals_gt_orig[:3]
                 vals_gt += self.get_quaternion_from_deg(vals_gt_orig[3:]) + vals_gt_orig[3:]
-                self.series_all.append(pd.Series(data=vals_gt, index=columns_orig))
-                self.frame_index += 1
+                self.series_all_apriltag.append(pd.Series(data=vals_gt, index=columns_orig))
+                self.frame_idx_apriltag += 1
                 
             #grid_size = int(self.get_parameter('grid_size').value)
             markers_id4 = self.get_markers_with_id(msg, ':4')
@@ -171,42 +180,34 @@ class EvaluationData(Node):
                 
                 series_resulting.append(series_orig)
                 
-                # TODO add mot
-                self.apriltag_mot3.append(series_orig)
-                self.apriltag_mot5.append(series_orig)
-                self.apriltag_mot10.append(series_orig)
+                self.mot3_apriltag.append(series_orig)
+                self.mot5_apriltag.append(series_orig)
+                self.mot10_apriltag.append(series_orig)
                 
-                if len(self.apriltag_mot3) == 3:
-                    # create mot series
-                    print("mot3")
-                    means = self.get_means(self.apriltag_mot3)
+                if len(self.mot3_apriltag) == 3:
+                    means = self.get_means(self.mot3_apriltag)
                     series_resulting += means
-                    self.apriltag_mot3.clear()
+                    self.mot3_apriltag.clear()
                     
-                if len(self.apriltag_mot5) == 5:
-                    # create mot series
-                    print("mot5")
-                    means = self.get_means(self.apriltag_mot5)
+                if len(self.mot5_apriltag) == 5:
+                    means = self.get_means(self.mot5_apriltag)
                     series_resulting += means
-                    self.apriltag_mot5.clear()
+                    self.mot5_apriltag.clear()
                     
-                if len(self.apriltag_mot10) == 10:
-                    # create mot series
-                    print("mot10")
-                    means = self.get_means(self.apriltag_mot10)
+                if len(self.mot10_apriltag) == 10:
+                    means = self.get_means(self.mot10_apriltag)
                     series_resulting += means
-                    self.apriltag_mot10.clear()
+                    self.mot10_apriltag.clear()
                 
-                self.series_all.append(pd.concat(series_resulting, sort=False))
-                self.frame_index += 1
+                self.series_all_apriltag.append(pd.concat(series_resulting, sort=False))
+                self.frame_idx_apriltag += 1
                 
-                print(f'Frame {self.frame_index} recorded at time {time_diff}.')
-                # print(f'Resulting series: {pd.concat(series_resulting, sort=False)}')
+                print(f'AprilTag Marker with index {self.frame_idx_apriltag} recorded at time {time_diff}.')
                     
                 if time_diff >= duration_max:
                     self.df_apriltag = pd.concat(
                         [self.df_apriltag, 
-                         pd.concat(self.series_all, axis=1, sort=False).T],
+                         pd.concat(self.series_all_apriltag, axis=1, sort=False).T],
                         ignore_index=True,
                         sort=False)
                     
@@ -226,27 +227,26 @@ class EvaluationData(Node):
                     
                     self.df_apriltag.to_excel(path_excel, sheet_name='AprilTag')
                     
-                    self.start_time = -1
-                    self.frame_index = -1
-                    self.apriltag_mot3.clear()
-                    self.apriltag_mot5.clear()
-                    self.apriltag_mot10.clear()
+                    self.start_time_apriltag = -1
+                    self.frame_idx_apriltag = -1
+                    self.mot3_apriltag.clear()
+                    self.mot5_apriltag.clear()
+                    self.mot10_apriltag.clear()
 
                     self.set_parameters([Parameter(
-                        'record',
+                        'record_apriltag',
                         Parameter.Type.BOOL,
                         False)])
                     
     def aruco_listener_callback(self, msg):
-        if self.get_parameter('record').value:
+        if self.get_parameter('record_aruco').value:
             
-            if self.frame_index < 0:
+            if self.frame_idx_aruco < 0:
                 vals_gt_orig = list(self.get_parameter('vals_gt').value)
-                print(vals_gt_orig)
                 vals_gt  = [-1, -1] + vals_gt_orig[:3]
                 vals_gt += self.get_quaternion_from_deg(vals_gt_orig[3:]) + vals_gt_orig[3:]
-                self.series_all.append(pd.Series(data=vals_gt, index=columns_orig))
-                self.frame_index += 1
+                self.series_all_aruco.append(pd.Series(data=vals_gt, index=columns_orig))
+                self.frame_idx_apriltag += 1
                 
             #grid_size = int(self.get_parameter('grid_size').value)
             markers_id4 = self.get_markers_with_id(msg, ':4')
@@ -266,41 +266,40 @@ class EvaluationData(Node):
                 series_resulting.append(series_orig)
                 
                 # TODO add mot
-                self.apriltag_mot3.append(series_orig)
-                self.apriltag_mot5.append(series_orig)
-                self.apriltag_mot10.append(series_orig)
+                self.mot3_apriltag.append(series_orig)
+                self.mot5_apriltag.append(series_orig)
+                self.mot10_apriltag.append(series_orig)
                 
-                if len(self.apriltag_mot3) == 3:
+                if len(self.mot3_apriltag) == 3:
                     # create mot series
-                    print("mot3")
-                    means = self.get_means(self.apriltag_mot3)
+                    print("mot3 au")
+                    means = self.get_means(self.mot3_apriltag)
                     series_resulting += means
-                    self.apriltag_mot3.clear()
+                    self.mot3_apriltag.clear()
                     
-                if len(self.apriltag_mot5) == 5:
+                if len(self.mot5_apriltag) == 5:
                     # create mot series
-                    print("mot5")
-                    means = self.get_means(self.apriltag_mot5)
+                    print("mot5 au")
+                    means = self.get_means(self.mot5_apriltag)
                     series_resulting += means
-                    self.apriltag_mot5.clear()
+                    self.mot5_apriltag.clear()
                     
-                if len(self.apriltag_mot10) == 10:
+                if len(self.mot10_apriltag) == 10:
                     # create mot series
-                    print("mot10")
-                    means = self.get_means(self.apriltag_mot10)
+                    print("mot10 au")
+                    means = self.get_means(self.mot10_apriltag)
                     series_resulting += means
-                    self.apriltag_mot10.clear()
+                    self.mot10_apriltag.clear()
                 
-                self.series_all.append(pd.concat(series_resulting, sort=False))
-                self.frame_index += 1
+                self.series_all_apriltag.append(pd.concat(series_resulting, sort=False))
+                self.frame_idx_apriltag += 1
                 
-                print(f'Frame {self.frame_index} recorded at time {time_diff}.')
-                # print(f'Resulting series: {pd.concat(series_resulting, sort=False)}')
+                print(f'AprilTag Marker with index {self.frame_idx_apriltag} recorded at time {time_diff}.')
                     
                 if time_diff >= duration_max:
                     self.df_apriltag = pd.concat(
                         [self.df_apriltag, 
-                         pd.concat(self.series_all, axis=1, sort=False).T],
+                         pd.concat(self.series_all_apriltag, axis=1, sort=False).T],
                         ignore_index=True,
                         sort=False)
                     
@@ -320,14 +319,14 @@ class EvaluationData(Node):
                     
                     self.df_apriltag.to_excel(path_excel, sheet_name='ArUco')
                     
-                    self.start_time = -1
-                    self.frame_index = -1
-                    self.apriltag_mot3.clear()
-                    self.apriltag_mot5.clear()
-                    self.apriltag_mot10.clear()
+                    self.start_time_aruco = -1
+                    self.frame_idx_ruco = -1
+                    self.mot3_apriltag.clear()
+                    self.mot5_apriltag.clear()
+                    self.mot10_apriltag.clear()
 
                     self.set_parameters([Parameter(
-                        'record',
+                        'record_aruco',
                         Parameter.Type.BOOL,
                         False)])
            
@@ -400,7 +399,7 @@ class EvaluationData(Node):
         
         values = list()
         if original:
-            values += [time_diff, self.frame_index]
+            values += [time_diff, self.frame_idx_apriltag]
         values += [trans.x, trans.y, trans.z]
         if original:
             values += [rot.w, rot.x, rot.y, rot.z]
@@ -423,13 +422,20 @@ class EvaluationData(Node):
         return [(180/pi)*roll, (180/pi)*pitch, (180/pi)*yaw]
       
         
-    def get_markers_with_id(self, msg, id_string):
-        # TODO make applicable for ArUco
+    def get_markers_with_id(self, msg, id_val):
         markers_id4 = []
-        for tf in msg.transforms:
-            tag_id = tf.child_frame_id
-            if tag_id.endswith(id_string):
-                markers_id4.append(tf)
+        
+        if type(msg) == TFMessage:
+            for tf in msg.transforms:
+                tag_id = tf.child_frame_id
+                if tag_id.endswith(id_val):
+                    markers_id4.append(tf)
+        elif type(msg) == ArucoMarkers:        
+            for i, pose in enumerate(msg.poses):
+                tag_id = msg.marker_ids[i]
+                if tag_id == id_val:
+                    markers_id4.append(pose)        
+                
         return markers_id4
       
         
@@ -437,9 +443,9 @@ class EvaluationData(Node):
         nanoseconds = stamp.nanosec
         seconds = stamp.sec
         time_current = seconds + (nanoseconds * 10**(-9))
-        if self.start_time < 0:
-            self.start_time = time_current
-        return time_current - self.start_time 
+        if self.start_time_apriltag < 0:
+            self.start_time_apriltag = time_current
+        return time_current - self.start_time_apriltag 
         
 
          
