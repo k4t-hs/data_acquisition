@@ -14,7 +14,7 @@ from rclpy.node import Node
 from tf2_msgs.msg import TFMessage
 from ros2_aruco_interfaces.msg import ArucoMarkers
 
-from tf_transformations import euler_from_quaternion, quaternion_from_euler
+import tf_transformations as tf2#import euler_from_quaternion, quaternion_from_euler
 
 
 topic_types = ['original', 
@@ -88,8 +88,8 @@ dict_motmog = {'columns_mot3z3' :
                     'rot x deg mog9iqr', 'rot y deg mog9iqr', 'rot z deg mog9iqr']}
 
 
-path_apriltag = '/home/kathrin/dev_ws/csv_files/test/'
-path_aruco= '/home/kathrin/dev_ws/csv_files/test/'
+path_apriltag = '/home/kathrin/dev_ws/csv_files/new-method/'
+path_aruco= '/home/kathrin/dev_ws/csv_files/new-method/'
 
 duration_max = 10.0
 
@@ -299,6 +299,7 @@ class EvaluationData(Node):
                         
                 self.frame_idx_aruco += 1
                 
+            # TODO: add id as parameter
             markers_id4 = self.get_markers_with_id(msg, 4)
             
             if len(markers_id4) == grid_size:#1:#grid_size:
@@ -307,10 +308,35 @@ class EvaluationData(Node):
                 for idx, marker in enumerate(markers_id4): 
                     time_diff = self.get_time(msg.header.stamp, False)
                     
+                    # TODO adapt to other coordinate system (aruco <--> apriltag)
                     pos = marker.position
                     orient = marker.orientation
                     
                     vals_orig = self.get_data_from_msg(pos, orient, self.frame_idx_aruco, True, time_diff)
+                    # print(f'Angles original:\n\t{vals_orig[-3:]}')
+                    
+                    # # Tz = tf2.rotation_matrix(pi, (0, 0, 1))
+                    # # print(f'Rotation matix before:\n\t{Tz[:3,:3]}')
+                    # # Rz = np.array(Tz[:3,:3]).transpose()
+                    # # # Rz = Rz.transpose()
+                    # # Tz[:3,:3] = Rz
+                    # Tz = np.array([[1,0,0,0],
+                    #                [0,-1,0,0],
+                    #                [0,0,-1,0],
+                    #                [0,0,0,1]])
+                    # # Rz = Tz[:3,:3].transpose()
+                    # # Tz[:3,:3] = Rz
+                    # # print(f'Rotation matix:\n\t{Rz}')
+                    # print(f'Rotation matix:\n\t{Tz}')
+                    # print(f'Orientation original:\n\t{orient}')
+                    # # print(f'Position original:\n\t{pos}')
+                    # # (pos.x, pos.y, pos.z) = np.matmul(Rz, np.array([pos.x, pos.y, pos.z]))
+                    # # print(f'Transformed position:\n\t{pos}')
+                    # (orient.x, orient.y, orient.z, orient.w) = np.matmul(Tz, np.array([orient.x, orient.y, orient.z, orient.w]))
+                    # print(f'Transformed orientation:\n\t{orient}')
+                    
+                    # vals_orig = self.get_data_from_msg(pos, orient, self.frame_idx_aruco, True, time_diff)
+                    # print(f'Transformed angles:\n\t{vals_orig[-3:]}')
                     
                     if grid_size == 1:
                         series_orig = pd.Series(data=vals_orig, index=columns_standard)
@@ -519,7 +545,7 @@ class EvaluationData(Node):
         
         
     def get_quaternion_from_deg(self, deg):
-        (x, y, z, w) =  quaternion_from_euler(
+        (x, y, z, w) =  tf2.quaternion_from_euler(
             (deg[0]/180)*pi,
             (deg[1]/180)*pi,
             (deg[2]/180)*pi)
@@ -527,7 +553,7 @@ class EvaluationData(Node):
     
     
     def get_deg_from_quaternion(self, rot):
-        (roll, pitch, yaw) = euler_from_quaternion([rot.x, rot.y, rot.z, rot.w])
+        (roll, pitch, yaw) = tf2.euler_from_quaternion([rot.x, rot.y, rot.z, rot.w])
         deg_list = self.get_deg([roll, pitch,yaw])
         return deg_list
     
@@ -543,10 +569,10 @@ class EvaluationData(Node):
         markers_id4 = []
         
         if type(msg) == TFMessage:
-            for tf in msg.transforms:
-                tag_id = tf.child_frame_id
+            for transf in msg.transforms:
+                tag_id = transf.child_frame_id
                 if tag_id.endswith(id_val):
-                    markers_id4.append(tf)
+                    markers_id4.append(transf)
         elif type(msg) == ArucoMarkers:        
             for i, pose in enumerate(msg.poses):
                 tag_id = msg.marker_ids[i]
