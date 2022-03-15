@@ -106,12 +106,12 @@ class EvaluationData(Node):
         self.declare_parameters(
             namespace='',
             parameters=[
-                ('name_apriltag', 'data_apriltag.xlsx'),
-                ('name_aruco', 'data_aruco.xlsx'),
+                ('name_apriltag', 'data_apriltag_50mm.xlsx'),
+                ('name_aruco', 'data_aruco_50mm.xlsx'),
                 ('grid_size', 1),
                 ('vals_gt', [0.0, 0.0, 30.0, 0.0, 0.0, 0.0]),
-                ('record_apriltag', True),
-                ('record_aruco', True)])
+                ('record_apriltag', False),
+                ('record_aruco', False)])
         path_apriltag += str(self.get_parameter('name_apriltag').value)
         path_aruco += str(self.get_parameter('name_aruco').value) 
         
@@ -184,6 +184,8 @@ class EvaluationData(Node):
                 self.frame_idx_apriltag += 1
                 
             markers_id4 = self.get_markers_with_id(msg, ':4')
+            print("AprilTag Num:", len(markers_id4))
+
             
             if len(markers_id4) == grid_size:#1:#grid_size:
                 series_resulting = list()
@@ -195,6 +197,10 @@ class EvaluationData(Node):
                     rot = marker.transform.rotation
                     
                     vals_orig = self.get_data_from_msg(trans, rot, self.frame_idx_apriltag, True, time_diff)
+                    
+                    # print(f'AprilTag rot: \n\t{vals_orig[-3]}\n\t{vals_orig[-2]}\n\t{vals_orig[-1]}')
+                    # print(f'AprilTag trans:\n\t{trans.x}\n\t{trans.y}\n\t{trans.z}')
+
                     
                     if grid_size == 1:
                         series_orig = pd.Series(data=vals_orig, index=columns_standard)
@@ -234,7 +240,7 @@ class EvaluationData(Node):
                 if time_diff >= duration_max:
                     self.df_apriltag = pd.concat(
                         [self.df_apriltag, 
-                         pd.concat(self.series_all_apriltag, axis=1, sort=False).T],
+                          pd.concat(self.series_all_apriltag, axis=1, sort=False).T],
                         ignore_index=True,
                         sort=False)
                     
@@ -302,6 +308,8 @@ class EvaluationData(Node):
             # TODO: add id as parameter
             markers_id4 = self.get_markers_with_id(msg, 4)
             
+            print("ArUco Num:", len(markers_id4))
+            
             if len(markers_id4) == grid_size:#1:#grid_size:
                 series_resulting = list()
                 
@@ -313,6 +321,25 @@ class EvaluationData(Node):
                     orient = marker.orientation
                     
                     vals_orig = self.get_data_from_msg(pos, orient, self.frame_idx_aruco, True, time_diff)
+                    
+                    # print(f'ArUco rotation original: {vals_orig[-3]}, {vals_orig[-2]}, {vals_orig[-1]}')
+
+                    # x_adapted = vals_orig[-3] + 180
+                    # if x_adapted > 180:
+                    #     x_adapted = -(x_adapted -360)
+                    # elif x_adapted < -180:
+                    #     x_adapted = -(x_adapted + 360)
+                    # else:
+                    #     x_adapted = -x_adapted
+                    # z_adapted = vals_orig[-1] + 180
+                    # if z_adapted > 180:
+                    #     z_adapted = z_adapted -360
+                    # elif z_adapted < -180:
+                    #     z_adapted = z_adapted + 360
+                    
+                    # print(f'ArUco rot: \n\t{x_adapted}\n\t{-vals_orig[-2]}\n\t{z_adapted}')
+                    # print(f'ArUco trans:\n\t{pos.x}\n\t{pos.y}\n\t{pos.z}')
+                            
                     # print(f'Angles original:\n\t{vals_orig[-3:]}')
                     
                     # # Tz = tf2.rotation_matrix(pi, (0, 0, 1))
