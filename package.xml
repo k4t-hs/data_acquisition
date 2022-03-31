@@ -4,8 +4,8 @@
   <name>data_acquisition</name>
   <version>0.0.0</version>
   <description>Extract and handle data from bag files</description>
-  <maintainer email="alka1020@h-ka.de">Kathrin Alba</maintainer>
-  <license>TODO: License declaration</license>
+  <maintainer>Kathrin Alba</maintainer>
+
   
   <exec_depend>rclpy</exec_depend>
   <exec_depend>tf2_msgs</exec_depend>

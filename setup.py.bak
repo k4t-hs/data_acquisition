@@ -14,7 +14,9 @@ setup(
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='Kathrin Alba',
+    maintainer_email='alka1020@h-ka.de',
     description='Extract and handle data from bag files',
+    license='TODO: License declaration',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
