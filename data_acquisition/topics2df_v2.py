@@ -14,18 +14,24 @@ from rclpy.node import Node
 from tf2_msgs.msg import TFMessage
 from ros2_aruco_interfaces.msg import ArucoMarkers
 
-import tf_transformations as tf2#import euler_from_quaternion, quaternion_from_euler
+import tf_transformations as tf2
+
+"""
+Abbreviations:
+    mot3       mean over 3 frames of a single detected marker ('mean over time')
+    mog3       mean over a grid of 3 markers ('mean over grid')
+    z3 (z2)    z-score outlier detection with threshold of 3 (2)
+    iqr        outlier detection with interquartile range
+    
+"""
 
 
+# Global variables
 topic_types = ['original', 
                'mot3z3', 'mot3z2' ,'mot3iqr',
                'mot5z3', 'mot5z2', 'mot5iqr',
                'mot10z3', 'mot10z2', 'mot10iqr',
                'mog3', 'mog5', 'mog9']
-
-# gt_columns = ['time', 'frame index',
-#               'trans x original', 'trans y original', 'trans z original',
-#               'rot x deg original', 'rot y deg original', 'rot z deg original']
 
 columns_orig = ['time', 'frame index',
                     'trans x original', 'trans y original', 'trans z original',
@@ -88,8 +94,8 @@ dict_motmog = {'columns_mot3z3' :
                     'rot x deg mog9iqr', 'rot y deg mog9iqr', 'rot z deg mog9iqr']}
 
 
-path_apriltag = '/home/kathrin/dev_ws/csv_files/new-method/'
-path_aruco= '/home/kathrin/dev_ws/csv_files/new-method/'
+path_apriltag = os.path.expanduser("~") + os.sep
+path_aruco = os.path.expanduser("~") + os.sep
 
 duration_max = 10.0
 
@@ -100,21 +106,24 @@ class EvaluationData(Node):
 
     def __init__(self):
         super().__init__('eval_data')
-        global path_apriltag, path_aruco, topic_types, grid_size
+        global path_apriltag, path_aruco, topic_types, grid_size, duration_max
         
-        # (parameter name, parameter value)
+        # Define and read the parameters
         self.declare_parameters(
             namespace='',
             parameters=[
-                ('name_apriltag', 'data_apriltag_50mm.xlsx'),
-                ('name_aruco', 'data_aruco_50mm.xlsx'),
+                ('name_apriltag', 'data_apriltag.xlsx'),
+                ('name_aruco', 'data_aruco.xlsx'),
                 ('grid_size', 1),
-                ('vals_gt', [0.0, 0.0, 30.0, 0.0, 0.0, 0.0]),
+                ('vals_gt', [0.0, 0.0, 0.3, 0.0, 0.0, 0.0]),
                 ('record_apriltag', False),
-                ('record_aruco', False)])
+                ('record_aruco', False),
+                ('duration_max', 10.0)])
         path_apriltag += str(self.get_parameter('name_apriltag').value)
         path_aruco += str(self.get_parameter('name_aruco').value) 
+        duration_max = float(self.get_parameter('duration_max').value)
         
+        # Initialize start time, frame index and data structures
         self.start_time_apriltag = -1
         self.frame_idx_apriltag = -1
         self.series_all_apriltag = list()
@@ -126,6 +135,7 @@ class EvaluationData(Node):
         self.df_apriltag = None
         self.df_aruco = None
         
+        # Create AprilTag TFMessage subsciption
         self.sub_apriltag = self.create_subscription(
             TFMessage,
             "tf",
@@ -137,6 +147,7 @@ class EvaluationData(Node):
         self.mot5_apriltag = list()
         self.mot10_apriltag = list()
      
+        # Create ArUco ArucoMarkers (message)
         self.sub_aruco = self.create_subscription(
             ArucoMarkers,
             "aruco_markers",
@@ -150,18 +161,26 @@ class EvaluationData(Node):
      
 
     def apriltag_listener_callback(self, msg):
+        """
+        Callback for AprilTag TFMessages
+        """
         global grid_size
-        columns_standard = columns_orig        
+        columns_standard = columns_orig    
+        
+        # Only process data if the parameter record_apriltag is true
         if self.get_parameter('record_apriltag').value:
             
+            # If a new benchmark is started
             if self.frame_idx_apriltag < 0:
+                # Get benchmark ground truth values
                 vals_gt_orig = list(self.get_parameter('vals_gt').value)
-                # if type(vals_gt_orig) is not list:
-                #     vals_gt_orig = vals_gt_orig.tolist()
                 vals_gt  = [-1, -1] + vals_gt_orig[:3]
                 vals_gt += self.get_quaternion_from_deg(vals_gt_orig[3:]) + vals_gt_orig[3:]
+                # Get grid size
                 grid_size = int(self.get_parameter('grid_size').value)
+                # If it is a single marker (no grid)
                 if grid_size == 1:
+                    # If applicable read existing data from the AprilTag data file
                     if os.path.isfile(path_apriltag):
                         self.df_apriltag = pd.read_excel(path_apriltag, sheet_name='AprilTag')
                         self.df_apriltag = self.df_apriltag.iloc[:, 1:]
@@ -169,9 +188,11 @@ class EvaluationData(Node):
                     else:
                         dictionary = dict(zip(columns_standard, vals_gt))
                         self.df_apriltag = pd.DataFrame(data=dictionary, index=[0])
-                        # self.frame_idx_apriltag=0
-                else:
+                else: # If there is a grid of markers
+                    # Automatically extend the file name with a mog extension 
+                    # mog file structure differs from mot and original data
                     filename = path_apriltag.replace('.xlsx', f'_mog{grid_size}.xlsx')
+                    # If applicable read existing data from the AprilTag mog data file
                     if os.path.isfile(filename):
                         self.df_apriltag = pd.read_excel(filename, sheet_name='AprilTag')
                         self.df_apriltag = self.df_apriltag.iloc[:, 1:]
@@ -179,28 +200,21 @@ class EvaluationData(Node):
                     else:
                         dictionary = dict(zip(columns_standard, vals_gt))
                         self.df_apriltag = pd.DataFrame(data=dictionary, index=[0])
-                        # self.frame_idx_apriltag=0
                         
                 self.frame_idx_apriltag += 1
-                
-            markers_id4 = self.get_markers_with_id(msg, ':4')
-            print("AprilTag Num:", len(markers_id4))
-
             
-            if len(markers_id4) == grid_size:#1:#grid_size:
+            # List and count all detected markers with id 4
+            markers_id4 = self.get_markers_with_id(msg, ':4')            
+            if len(markers_id4) == grid_size:
                 series_resulting = list()
                 
                 for idx, marker in enumerate(markers_id4):                    
-                    time_diff = self.get_time(marker.header.stamp)#msg.transforms[0].header.stamp)
+                    time_diff = self.get_time(marker.header.stamp)
                     
                     trans = marker.transform.translation
                     rot = marker.transform.rotation
                     
                     vals_orig = self.get_data_from_msg(trans, rot, self.frame_idx_apriltag, True, time_diff)
-                    
-                    # print(f'AprilTag rot: \n\t{vals_orig[-3]}\n\t{vals_orig[-2]}\n\t{vals_orig[-1]}')
-                    # print(f'AprilTag trans:\n\t{trans.x}\n\t{trans.y}\n\t{trans.z}')
-
                     
                     if grid_size == 1:
                         series_orig = pd.Series(data=vals_orig, index=columns_standard)
@@ -209,7 +223,8 @@ class EvaluationData(Node):
                                                 index=[s+' '+str(idx) for s in columns_standard])
                      
                     series_resulting.append(series_orig)
-                    
+                
+                # Append the original data to the dataframe    
                 if grid_size == 1:
                     self.mot3_apriltag.append(series_orig)
                     self.mot5_apriltag.append(series_orig)
@@ -237,6 +252,7 @@ class EvaluationData(Node):
                 
                 print(f'AprilTag Marker with index {self.frame_idx_apriltag} recorded at time {time_diff}.')
                 
+                # After duration_max seconds automatically save the data stored in the AprilTag dataframe
                 if time_diff >= duration_max:
                     self.df_apriltag = pd.concat(
                         [self.df_apriltag, 
@@ -261,6 +277,7 @@ class EvaluationData(Node):
                         print("--------------------------------------------------",
                               "--------------------------------------------------")
                     
+                    # Reset all variables
                     self.start_time_apriltag = -1
                     self.frame_idx_apriltag = -1
                     self.mot3_apriltag.clear()
@@ -274,16 +291,27 @@ class EvaluationData(Node):
                         False)])
                     
     def aruco_listener_callback(self, msg):
+        """
+        Callback for AprilTag TFMessages
+        """
         global grid_size
         columns_standard = columns_orig
+        
+        # Only process data if the parameter record_aruco is true
         if self.get_parameter('record_aruco').value:
             
+            # If a new benchmark is started
             if self.frame_idx_aruco < 0:
+                # Get benchmark ground truth values
                 vals_gt_orig = list(self.get_parameter('vals_gt').value)
                 vals_gt  = [-1, -1] + vals_gt_orig[:3]
                 vals_gt += self.get_quaternion_from_deg(vals_gt_orig[3:]) + vals_gt_orig[3:]
+                # Get the grid size
                 grid_size = int(self.get_parameter('grid_size').value)
+                
+                # If it is a single marker (no grid)
                 if grid_size == 1:
+                    # If applicable read existing data from the ArUco data file
                     if os.path.isfile(path_aruco):
                         self.df_aruco = pd.read_excel(path_aruco, sheet_name='ArUco')
                         self.df_aruco = self.df_aruco.iloc[:, 1:]
@@ -291,9 +319,11 @@ class EvaluationData(Node):
                     else:
                         dictionary = dict(zip(columns_standard, vals_gt))
                         self.df_aruco= pd.DataFrame(data=dictionary, index=[0])
-                        # self.frame_idx_aruco=0
                 else:
+                    # Automatically extend the file name with a mog extension 
+                    # mog file structure differs from mot and original data
                     filename = path_aruco.replace('.xlsx', f'_mog{grid_size}.xlsx')
+                    # If applicable read existing data from the ArUco data file
                     if os.path.isfile(filename):
                         self.df_aruco = pd.read_excel(filename, sheet_name='ArUco')
                         self.df_aruco = self.df_aruco.iloc[:, 1:]
@@ -301,69 +331,23 @@ class EvaluationData(Node):
                     else:
                         dictionary = dict(zip(columns_standard, vals_gt))
                         self.df_aruco = pd.DataFrame(data=dictionary, index=[0])
-                        # self.frame_idx_aruco=0
                         
                 self.frame_idx_aruco += 1
                 
             # TODO: add id as parameter
             markers_id4 = self.get_markers_with_id(msg, 4)
             
-            print("ArUco Num:", len(markers_id4))
-            
-            if len(markers_id4) == grid_size:#1:#grid_size:
+            # List and count all detected markers with id 4
+            if len(markers_id4) == grid_size:
                 series_resulting = list()
                 
                 for idx, marker in enumerate(markers_id4): 
                     time_diff = self.get_time(msg.header.stamp, False)
                     
-                    # TODO adapt to other coordinate system (aruco <--> apriltag)
                     pos = marker.position
                     orient = marker.orientation
                     
                     vals_orig = self.get_data_from_msg(pos, orient, self.frame_idx_aruco, True, time_diff)
-                    
-                    # print(f'ArUco rotation original: {vals_orig[-3]}, {vals_orig[-2]}, {vals_orig[-1]}')
-
-                    # x_adapted = vals_orig[-3] + 180
-                    # if x_adapted > 180:
-                    #     x_adapted = -(x_adapted -360)
-                    # elif x_adapted < -180:
-                    #     x_adapted = -(x_adapted + 360)
-                    # else:
-                    #     x_adapted = -x_adapted
-                    # z_adapted = vals_orig[-1] + 180
-                    # if z_adapted > 180:
-                    #     z_adapted = z_adapted -360
-                    # elif z_adapted < -180:
-                    #     z_adapted = z_adapted + 360
-                    
-                    # print(f'ArUco rot: \n\t{x_adapted}\n\t{-vals_orig[-2]}\n\t{z_adapted}')
-                    # print(f'ArUco trans:\n\t{pos.x}\n\t{pos.y}\n\t{pos.z}')
-                            
-                    # print(f'Angles original:\n\t{vals_orig[-3:]}')
-                    
-                    # # Tz = tf2.rotation_matrix(pi, (0, 0, 1))
-                    # # print(f'Rotation matix before:\n\t{Tz[:3,:3]}')
-                    # # Rz = np.array(Tz[:3,:3]).transpose()
-                    # # # Rz = Rz.transpose()
-                    # # Tz[:3,:3] = Rz
-                    # Tz = np.array([[1,0,0,0],
-                    #                [0,-1,0,0],
-                    #                [0,0,-1,0],
-                    #                [0,0,0,1]])
-                    # # Rz = Tz[:3,:3].transpose()
-                    # # Tz[:3,:3] = Rz
-                    # # print(f'Rotation matix:\n\t{Rz}')
-                    # print(f'Rotation matix:\n\t{Tz}')
-                    # print(f'Orientation original:\n\t{orient}')
-                    # # print(f'Position original:\n\t{pos}')
-                    # # (pos.x, pos.y, pos.z) = np.matmul(Rz, np.array([pos.x, pos.y, pos.z]))
-                    # # print(f'Transformed position:\n\t{pos}')
-                    # (orient.x, orient.y, orient.z, orient.w) = np.matmul(Tz, np.array([orient.x, orient.y, orient.z, orient.w]))
-                    # print(f'Transformed orientation:\n\t{orient}')
-                    
-                    # vals_orig = self.get_data_from_msg(pos, orient, self.frame_idx_aruco, True, time_diff)
-                    # print(f'Transformed angles:\n\t{vals_orig[-3:]}')
                     
                     if grid_size == 1:
                         series_orig = pd.Series(data=vals_orig, index=columns_standard)
@@ -373,6 +357,7 @@ class EvaluationData(Node):
                     
                     series_resulting.append(series_orig)
                 
+                # Append the original data to the dataframe
                 if grid_size ==1:
                     self.mot3_aruco.append(series_orig)
                     self.mot5_aruco.append(series_orig)
@@ -399,7 +384,8 @@ class EvaluationData(Node):
                 self.frame_idx_aruco += 1
                 
                 print(f'ArUco Marker with index {self.frame_idx_aruco} recorded at time {time_diff}.')
-                    
+                  
+                # After duration_max seconds automatically save the data stored in the AprilTag dataframe
                 if time_diff >= duration_max:
                     self.df_aruco = pd.concat(
                         [self.df_aruco, 
@@ -423,7 +409,8 @@ class EvaluationData(Node):
                         print(f'Saved ArUco data in: {path_aruco.replace(".xlsx", f"_mog{grid_size}.xlsx")}')
                         print("--------------------------------------------------",
                               "--------------------------------------------------")
-                        
+                    
+                    # Reset parameters
                     self.start_time_aruco = -1
                     self.frame_idx_aruco = -1
                     self.mot3_aruco.clear()
@@ -438,7 +425,11 @@ class EvaluationData(Node):
            
     
         
-    def set_start_df(self, vals_gt):        
+    def set_start_df(self, vals_gt): 
+        """
+        Sets the initial dataframe. If the specified excel file already exists,
+        the existing data will be appended to the dataframe.
+        """
         grid_size = self.get_parameter('grid_size').value 
         
         if grid_size == 1:
@@ -478,6 +469,13 @@ class EvaluationData(Node):
                 
         
     def get_means(self, val_list, method_type='mot'): 
+        """
+        Get the mean of val_list for the optimisation method mathod_type with 
+        three variations of outlier erasing methods:
+        1. Erase value if its z-score is bigger than 3
+        2. Erase value if its z-score is bigger than 2
+        3. Erase value if its outside the interquartile range (iqr) +/- 1.5*iqr
+        """
         num_frames = len(val_list)
         series_resulting = list()
         
@@ -521,6 +519,10 @@ class EvaluationData(Node):
         
         
     def get_mean_z(self, df, max_val=3):
+        """
+        Get the mean value for every column of df after erasing outliers with 
+        a z-score bigger than max_val.
+        """
         warnings.filterwarnings('error')
         
         try:
@@ -541,6 +543,10 @@ class EvaluationData(Node):
     
     
     def get_mean_iqr(self, df):
+        """
+        Get the mean value for every column of df after erasing outliers with 
+        the interquartile range (iqr) +/- 1.5*iqr
+        """
         q1 = df.quantile(q=.25)
         q3 = df.quantile(q=.75)
         iqr = df.apply(stats.iqr)
@@ -552,8 +558,14 @@ class EvaluationData(Node):
         
         return df.mean()
         
+    
         
     def get_data_from_msg(self, trans, rot, idx, original=False, time_diff=None):
+        """
+        Extract the data for translation and rotation (and for original data
+        the time difference and frame index as well) from the message and
+        append the rotation in deg.
+        """
         if original and (time_diff is None):
             print("Please define time_diff for original messages.")
             time_diff = -1
@@ -572,6 +584,10 @@ class EvaluationData(Node):
         
         
     def get_quaternion_from_deg(self, deg):
+        """
+        Convert euler angles in roll-pitch-yaw convention in deg to quaternion.
+
+        """
         (x, y, z, w) =  tf2.quaternion_from_euler(
             (deg[0]/180)*pi,
             (deg[1]/180)*pi,
@@ -580,11 +596,17 @@ class EvaluationData(Node):
     
     
     def get_deg_from_quaternion(self, rot):
+        """
+        Convert quaternion to euler angles in roll-pitch-yaw convention in deg.
+        """
         (roll, pitch, yaw) = tf2.euler_from_quaternion([rot.x, rot.y, rot.z, rot.w])
         deg_list = self.get_deg([roll, pitch,yaw])
         return deg_list
     
     def get_deg(self, rad_list):
+        """
+        Convert radian measure to degree.
+        """
         deg_list = list()
         for x in rad_list:
             deg_list.append((180/pi)*x)
@@ -593,6 +615,9 @@ class EvaluationData(Node):
       
         
     def get_markers_with_id(self, msg, id_val):
+        """
+        Get the localisation data of all markers in msg with the id id_val.
+        """
         markers_id4 = []
         
         if type(msg) == TFMessage:
@@ -610,6 +635,10 @@ class EvaluationData(Node):
       
         
     def get_time(self, stamp, is_apriltag=True):
+        """
+        Get the time difference between the first recorded marker and the 
+        current one.
+        """
         nanoseconds = stamp.nanosec
         seconds = stamp.sec
         time_current = seconds + (nanoseconds * 10**(-9))
