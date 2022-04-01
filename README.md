@@ -5,11 +5,14 @@ To run it you need ros2 (foxy) and the [AprilTag](https://github.com/christianra
 The following optimisation methods are considered in addition to storing the original localisation data:  
   - calculating the localisation mean over multiple frames containing one fiducial marker detection (mean over time, mot) for 3, 5 and 10 frames
   - calculating the localisation mean over a grid of multiple markers per frame (mean over grid, mog) for a grid of 3 and 5 markers
-The suitable optimisation method according to the parameter `grid_size` (more information on parameters in the text below) will be selected automatically.  
+The suitable optimisation method according to the parameter `grid_size` (more information on parameters in the text below) will be selected automatically. 
+Before the means are calculated, outliers are erased using the z-score with two different thresholds (2, 3) or the interquartile range with a factor of 1.5 in both quartile directions respectively.
 
 You need to keep in mind that the coordinate system of a detected fiducial marker differs for AprilTag and ArUco so the rotational localisation values differ from each other as well. With a marker being positioned parallel the the camera's coordinate system, AprilTag's x-, y- and z-axes point in the same direction as the camera's. The ArUco coordinate system (on the left) in comparison to the AprilTag one (on the right) is shown in the image below. The ArUco z-axis points to the viewer out of the marker and the AprilTag z-axis points into the marker.  
 
-![Coordinate Systems](/images/coordinate_systems.png)
+![Coordinate Systems](/images/coordinate_systems.png)  
+
+***The benchmarking results show, that out of all the considered fiducial systems and optimisation methods, the ArUco system with the mean over multiple frames with single marker detections and outlier erasing with a z-score shows the best performance.***
 
 ## Launching the node:
 `ros2 run data_acquisition topics2df_v2`   
